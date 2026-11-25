@@ -171,7 +171,7 @@ python test_api.py          # all endpoints against the configured database
 ![Tablet view](docs/screenshots/tablet.png)
 
 ### Mobile
-![Mobile view](docs/screenshots/mobile.png)
+![Mobile view](docs/screenshots/mobile.jpeg)
 
 ## Security
 
