@@ -1,122 +1,187 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useEffect, useState } from "react";
+import {
+  getOptions,
+  getPatients,
+  deletePatient,
+  dischargePatient,
+  extractErrors,
+} from "./api/client";
+import Filters from "./components/Filters";
+import PatientTable from "./components/PatientTable";
+import PatientForm from "./components/PatientForm";
+import ConfirmDialog from "./components/ConfirmDialog";
 
-function App() {
-  const [count, setCount] = useState(0)
+const EMPTY_FILTERS = { ward: "", department: "", doctor: "" };
+
+export default function App() {
+  const [options, setOptions] = useState({
+    genders: [],
+    wards: [],
+    departments: [],
+    doctors: [],
+  });
+  const [patients, setPatients] = useState([]);
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [deleting, setDeleting] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  // Load dropdown options once
+  useEffect(() => {
+    getOptions()
+      .then(setOptions)
+      .catch((e) => setError(extractErrors(e).message));
+  }, []);
+
+  // Debounce the search box (300 ms)
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  // Load patients whenever filters, search or reloadKey change
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    getPatients({ ...filters, search })
+      .then((data) => {
+        if (cancelled) return;
+        setPatients(data);
+        setError("");
+      })
+      .catch((e) => {
+        if (!cancelled) setError(extractErrors(e).message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [filters, search, reloadKey]);
+
+  // Auto-hide toast
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const reload = () => setReloadKey((k) => k + 1);
+  const notify = (text, type = "success") => setToast({ text, type });
+
+  const openAdd = () => {
+    setEditing(null);
+    setFormOpen(true);
+  };
+  const openEdit = (patient) => {
+    setEditing(patient);
+    setFormOpen(true);
+  };
+
+  const handleSaved = (_saved, wasEdit) => {
+    setFormOpen(false);
+    setEditing(null);
+    notify(wasEdit ? "Patient updated" : "Patient added");
+    reload();
+  };
+
+  const handleDischarge = async (patient) => {
+    try {
+      await dischargePatient(patient.id);
+      notify(`${patient.name} marked as discharged`);
+      reload();
+    } catch (e) {
+      notify(extractErrors(e).message, "error");
+    }
+  };
+
+  const handleDelete = async () => {
+    setBusy(true);
+    try {
+      await deletePatient(deleting.id);
+      notify("Patient deleted");
+      setDeleting(null);
+      reload();
+    } catch (e) {
+      notify(extractErrors(e).message, "error");
+      setDeleting(null);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
+    <div className="app">
+      <header className="topbar">
         <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
+          <h1>Patient Admission Management</h1>
+          <p className="subtitle">{patients.length} patient(s) shown</p>
         </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
+        <button className="btn btn-primary" onClick={openAdd}>
+          + Add patient
         </button>
-      </section>
+      </header>
 
-      <div className="ticks"></div>
+      <main>
+        <Filters
+          options={options}
+          filters={filters}
+          onFilterChange={(key, value) =>
+            setFilters((f) => ({ ...f, [key]: value }))
+          }
+          searchInput={searchInput}
+          onSearchChange={setSearchInput}
+          onClear={() => {
+            setFilters(EMPTY_FILTERS);
+            setSearchInput("");
+            setSearch("");
+          }}
+        />
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+        {error && <div className="alert">{error}</div>}
+        {loading && patients.length === 0 && !error && (
+          <p className="empty">Loading patients...</p>
+        )}
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+        <PatientTable
+          patients={patients}
+          loading={loading}
+          onEdit={openEdit}
+          onDischarge={handleDischarge}
+          onDelete={setDeleting}
+        />
+      </main>
+
+      {formOpen && (
+        <PatientForm
+          patient={editing}
+          options={options}
+          onClose={() => setFormOpen(false)}
+          onSaved={handleSaved}
+        />
+      )}
+
+      {deleting && (
+        <ConfirmDialog
+          title="Delete patient?"
+          message={`Are you sure you want to delete ${deleting.name}? This cannot be undone.`}
+          confirmLabel="Delete"
+          busy={busy}
+          onConfirm={handleDelete}
+          onCancel={() => setDeleting(null)}
+        />
+      )}
+
+      {toast && <div className={`toast toast-${toast.type}`}>{toast.text}</div>}
+    </div>
+  );
 }
-
-export default App
